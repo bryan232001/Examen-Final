@@ -5,3 +5,5 @@ langchain-core
 faiss-cpu
 google-genai
 huggingface_hub
+torch
+torchvision
