@@ -2,7 +2,7 @@ import os
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
-from langchain_core.embeddings import Embeddings
+from langchain.embeddings.base import Embeddings
 from google import genai
 
 # --------------------------------------------------------------
@@ -10,7 +10,7 @@ from google import genai
 # --------------------------------------------------------------
 st.set_page_config(page_title="RAG arXiv Chat", page_icon="📚", layout="wide")
 st.title("📚 Chat RAG sobre arXiv Paper Abstracts")
-st.caption("Sistema de Recuperación de Información con embeddings + Gemini")
+st.caption(f"Categorías: {ev['categorias']} | Similitud: {ev['score']}")
 
 # --------------------------------------------------------------
 # API Key desde Streamlit Secrets (NUNCA hardcodeada)
@@ -60,9 +60,9 @@ from huggingface_hub import snapshot_download
 @st.cache_resource(show_spinner="Descargando índice FAISS desde Hugging Face...")
 def load_vector_store():
     local_path = snapshot_download(
-    repo_id="Bryan23y/rag-arxiv-faiss",
-    repo_type="dataset",
-)
+        repo_id="tu-usuario/rag-arxiv-faiss",  # el mismo REPO_ID del paso 2
+        repo_type="dataset",
+    )
     embedding_function = BGEEmbeddings()
     vector_store = FAISS.load_local(
         local_path,
@@ -70,7 +70,7 @@ def load_vector_store():
         allow_dangerous_deserialization=True,
     )
     return vector_store
-vector_store = load_vector_store() 
+
 
 # --------------------------------------------------------------
 # Funciones del pipeline RAG (idénticas a las del notebook)
