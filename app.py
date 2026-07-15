@@ -116,7 +116,7 @@ def rag_query(query, k=5):
             "titulo": doc.metadata.get("title", "N/A"),
             "categorias": doc.metadata.get("categories", "N/A"),
             "fragmento": doc.page_content[:300] + "...",
-            "score": round(1 - (float(score) ** 2) / 2, 4),  # convertimos distancia L2 a similitud coseno
+            "score": round(1 - (float(score) / 2), 4),  # CORRECTO
         }
         for doc, score in docs_with_scores
     ]
