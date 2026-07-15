@@ -3,6 +3,7 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
+from huggingface_hub import snapshot_download
 from google import genai
 
 # --------------------------------------------------------------
@@ -55,8 +56,6 @@ class BGEEmbeddings(Embeddings):
         return self.model.encode(instruccion + text, normalize_embeddings=True).tolist()
 
 
-from huggingface_hub import snapshot_download
-
 @st.cache_resource(show_spinner="Descargando índice FAISS desde Hugging Face...")
 def load_vector_store():
     local_path = snapshot_download(
@@ -73,12 +72,13 @@ def load_vector_store():
 
 vector_store = load_vector_store()
 
+
 # --------------------------------------------------------------
-# Funciones del pipeline RAG (idénticas a las del notebook)
+# Funciones del pipeline RAG
 # --------------------------------------------------------------
 def retrieve_documents(query, k=5):
     docs_with_scores = vector_store.similarity_search_with_score(query, k=k)
-    return docs_with_scores  # ahora retorna (doc, score) en vez de solo doc
+    return docs_with_scores  # retorna (doc, score) para exponer la evidencia completa
 
 
 def build_context(retrieved_documents):
@@ -111,12 +111,14 @@ def rag_query(query, k=5):
     retrieved_documents = [doc for doc, _ in docs_with_scores]
     context = build_context(retrieved_documents)
     answer = generate_answer(query, context)
+    
     evidencias = [
         {
             "titulo": doc.metadata.get("title", "N/A"),
             "categorias": doc.metadata.get("categories", "N/A"),
             "fragmento": doc.page_content[:300] + "...",
-            "score": round(1 - (float(score) / 2), 4),  # CORRECTO
+            # Conversión correcta: distancia L2 de FAISS -> Similitud Coseno
+            "score": round(1 - (float(score) / 2), 4),
         }
         for doc, score in docs_with_scores
     ]
@@ -142,16 +144,16 @@ with st.sidebar:
         "LLM: Gemini 2.5 Flash"
     )
 
-# Renderizar historial
+# Renderizar historial de la sesión
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg["role"] == "assistant" and "evidencias" in msg:
             with st.expander("📄 Ver evidencias utilizadas"):
                 for i, ev in enumerate(msg["evidencias"]):
-                    st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
-                    st.caption(f"Categorías: {ev['categorias']} | Similitud coseno: {ev['score']}")
-                    st.write(ev["fragmento"])
+                    st.markdown(f"**[Doc {i+1}] {ev.get('titulo', 'N/A')}**")
+                    st.caption(f"Categorías: {ev.get('categorias', 'N/A')} | Similitud coseno: {ev.get('score', 'N/A')}")
+                    st.write(ev.get("fragmento", ""))
                     st.markdown("---")
 
 # --------------------------------------------------------------
@@ -168,9 +170,9 @@ if query := st.chat_input("Escribe tu consulta sobre artículos científicos..."
         st.markdown(resultado["respuesta"])
         with st.expander("📄 Ver evidencias utilizadas"):
             for i, ev in enumerate(resultado["evidencias"]):
-                st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
-                st.caption(f"Categorías: {ev['categorias']} | Similitud coseno: {ev['score']}")
-                st.write(ev["fragmento"])
+                st.markdown(f"**[Doc {i+1}] {ev.get('titulo', 'N/A')}**")
+                st.caption(f"Categorías: {ev.get('categorias', 'N/A')} | Similitud coseno: {ev.get('score', 'N/A')}")
+                st.write(ev.get("fragmento", ""))
                 st.markdown("---")
 
     st.session_state.messages.append(
