@@ -60,9 +60,9 @@ from huggingface_hub import snapshot_download
 @st.cache_resource(show_spinner="Descargando índice FAISS desde Hugging Face...")
 def load_vector_store():
     local_path = snapshot_download(
-        repo_id="tu-usuario/rag-arxiv-faiss",  # el mismo REPO_ID del paso 2
-        repo_type="dataset",
-    )
+    repo_id="Bryan23y/rag-arxiv-faiss",
+    repo_type="dataset",
+)
     embedding_function = BGEEmbeddings()
     vector_store = FAISS.load_local(
         local_path,
