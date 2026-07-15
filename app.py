@@ -2,7 +2,7 @@ import os
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
-from langchain.embeddings.base import Embeddings
+from langchain_core.embeddings import Embeddings
 from google import genai
 
 # --------------------------------------------------------------
