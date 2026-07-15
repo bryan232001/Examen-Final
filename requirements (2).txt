@@ -1,0 +1,5 @@
+streamlit
+sentence-transformers
+langchain-community
+faiss-cpu
+google-genai
