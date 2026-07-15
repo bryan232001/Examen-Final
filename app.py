@@ -10,7 +10,7 @@ from google import genai
 # --------------------------------------------------------------
 st.set_page_config(page_title="RAG arXiv Chat", page_icon="📚", layout="wide")
 st.title("📚 Chat RAG sobre arXiv Paper Abstracts")
-st.caption(f"Categorías: {ev['categorias']} | Similitud: {ev['score']}")
+st.caption("Sistema de Recuperación de Información con embeddings + Gemini")
 
 # --------------------------------------------------------------
 # API Key desde Streamlit Secrets (NUNCA hardcodeada)
@@ -60,7 +60,7 @@ from huggingface_hub import snapshot_download
 @st.cache_resource(show_spinner="Descargando índice FAISS desde Hugging Face...")
 def load_vector_store():
     local_path = snapshot_download(
-        repo_id="tu-usuario/rag-arxiv-faiss",  # el mismo REPO_ID del paso 2
+        repo_id="Bryan23y/rag-arxiv-faiss",
         repo_type="dataset",
     )
     embedding_function = BGEEmbeddings()
@@ -71,13 +71,14 @@ def load_vector_store():
     )
     return vector_store
 
+vector_store = load_vector_store()
 
 # --------------------------------------------------------------
 # Funciones del pipeline RAG (idénticas a las del notebook)
 # --------------------------------------------------------------
 def retrieve_documents(query, k=5):
     docs_with_scores = vector_store.similarity_search_with_score(query, k=k)
-    return [doc for doc, _score in docs_with_scores]
+    return docs_with_scores  # ahora retorna (doc, score) en vez de solo doc
 
 
 def build_context(retrieved_documents):
@@ -102,78 +103,4 @@ def generate_answer(query, context):
             "system_instruction": "Eres un asistente de investigación riguroso y honesto.",
         },
     )
-    return response.text
-
-
-def rag_query(query, k=5):
-    retrieved_documents = retrieve_documents(query, k=k)
-    context = build_context(retrieved_documents)
-    answer = generate_answer(query, context)
-    evidencias = [
-        {
-            "titulo": doc.metadata.get("title", "N/A"),
-            "categorias": doc.metadata.get("categories", "N/A"),
-            "fragmento": doc.page_content[:300] + "...",
-        }
-        for doc in retrieved_documents
-    ]
-    return {"query": query, "respuesta": answer, "evidencias": evidencias}
-
-
-# --------------------------------------------------------------
-# Estado del chat (solo historial visual, sin memoria conversacional real)
-# --------------------------------------------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Slider para top-k en la barra lateral
-with st.sidebar:
-    st.header("⚙️ Configuración")
-    k = st.slider("Número de documentos a recuperar (k)", 1, 10, 5)
-    st.markdown("---")
-    st.markdown(
-        "**Sobre este sistema:**\n\n"
-        "Corpus: arXiv Paper Abstracts (Kaggle)\n\n"
-        "Embeddings: BAAI/bge-small-en-v1.5\n\n"
-        "Vector store: FAISS\n\n"
-        "LLM: Gemini 2.5 Flash"
-    )
-
-# Renderizar historial
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        if msg["role"] == "assistant" and "evidencias" in msg:
-            with st.expander("📄 Ver evidencias utilizadas"):
-                for i, ev in enumerate(msg["evidencias"]):
-                    st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
-                    st.caption(f"Categorías: {ev['categorias']}")
-                    st.write(ev["fragmento"])
-                    st.markdown("---")
-
-# --------------------------------------------------------------
-# Input de chat
-# --------------------------------------------------------------
-if query := st.chat_input("Escribe tu consulta sobre artículos científicos..."):
-    st.session_state.messages.append({"role": "user", "content": query})
-    with st.chat_message("user"):
-        st.markdown(query)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Buscando documentos relevantes y generando respuesta..."):
-            resultado = rag_query(query, k=k)
-        st.markdown(resultado["respuesta"])
-        with st.expander("📄 Ver evidencias utilizadas"):
-            for i, ev in enumerate(resultado["evidencias"]):
-                st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
-                st.caption(f"Categorías: {ev['categorias']}")
-                st.write(ev["fragmento"])
-                st.markdown("---")
-
-    st.session_state.messages.append(
-        {
-            "role": "assistant",
-            "content": resultado["respuesta"],
-            "evidencias": resultado["evidencias"],
-        }
-    )
+    return
