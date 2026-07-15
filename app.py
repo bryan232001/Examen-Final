@@ -112,14 +112,13 @@ def rag_query(query, k=5):
     context = build_context(retrieved_documents)
     answer = generate_answer(query, context)
     evidencias = [
-    {
-        "titulo": doc.metadata.get("title", "N/A"),
-        "categorias": doc.metadata.get("categories", "N/A"),
-        "fragmento": doc.page_content[:300] + "...",
-        "score": round(1 - (float(score) ** 2) / 2, 4),  # convertimos distancia L2 a similitud coseno
-    }
-    for doc, score in docs_with_scores
-]
+        {
+            "titulo": doc.metadata.get("title", "N/A"),
+            "categorias": doc.metadata.get("categories", "N/A"),
+            "fragmento": doc.page_content[:300] + "...",
+            "score": round(1 - (float(score) ** 2) / 2, 4),  # convertimos distancia L2 a similitud coseno
+        }
+        for doc, score in docs_with_scores
     ]
     return {"query": query, "respuesta": answer, "evidencias": evidencias}
 
@@ -151,7 +150,7 @@ for msg in st.session_state.messages:
             with st.expander("📄 Ver evidencias utilizadas"):
                 for i, ev in enumerate(msg["evidencias"]):
                     st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
-                    st.caption(f"Categorías: {ev['categorias']} | Similitud: {ev['score']}")
+                    st.caption(f"Categorías: {ev['categorias']} | Similitud coseno: {ev['score']}")
                     st.write(ev["fragmento"])
                     st.markdown("---")
 
@@ -170,7 +169,7 @@ if query := st.chat_input("Escribe tu consulta sobre artículos científicos..."
         with st.expander("📄 Ver evidencias utilizadas"):
             for i, ev in enumerate(resultado["evidencias"]):
                 st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
-                st.caption(f"Categorías: {ev['categorias']} | Similitud: {ev['score']}")
+                st.caption(f"Categorías: {ev['categorias']} | Similitud coseno: {ev['score']}")
                 st.write(ev["fragmento"])
                 st.markdown("---")
 
