@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from langchain_community.vectorstores import FAISS
 from langchain_core.embeddings import Embeddings
 from huggingface_hub import snapshot_download
@@ -11,7 +11,7 @@ from google import genai
 # --------------------------------------------------------------
 st.set_page_config(page_title="RAG arXiv Chat", page_icon="📚", layout="wide")
 st.title("📚 Chat RAG sobre arXiv Paper Abstracts")
-st.caption("Sistema de Recuperación de Información con embeddings + Gemini")
+st.caption("Sistema de Recuperación de Información con embeddings, re-ranking + Gemini")
 
 # --------------------------------------------------------------
 # API Key desde Streamlit Secrets (NUNCA hardcodeada)
@@ -74,11 +74,41 @@ vector_store = load_vector_store()
 
 
 # --------------------------------------------------------------
-# Funciones del pipeline RAG
+# Carga de modelo de Re-ranking (Cross-Encoder)
 # --------------------------------------------------------------
-def retrieve_documents(query, k=5):
-    docs_with_scores = vector_store.similarity_search_with_score(query, k=k)
-    return docs_with_scores  # retorna (doc, score) para exponer la evidencia completa
+@st.cache_resource(show_spinner="Cargando modelo de Re-ranking (Cross-Encoder)...")
+def load_reranker():
+    # Modelo ligero (~80MB) optimizado para alta precisión al ordenar pasajes
+    return CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+reranker = load_reranker()
+
+
+# --------------------------------------------------------------
+# Funciones del pipeline RAG (CON RE-RANKING INTEGRADO)
+# --------------------------------------------------------------
+def retrieve_documents(query, k=5, fetch_k=15):
+    """
+    1. Recupera una lista amplia de candidatos (fetch_k=15) con FAISS (Bi-Encoder).
+    2. Re-ordena los candidatos usando un Cross-Encoder para máxima precisión.
+    3. Retorna los top-k definitivos.
+    """
+    # 1. Búsqueda vectorial inicial (High Recall)
+    initial_docs_with_scores = vector_store.similarity_search_with_score(query, k=fetch_k)
+    initial_docs = [doc for doc, _ in initial_docs_with_scores]
+
+    # 2. Preparar pares [consulta, abstract] para el Cross-Encoder
+    pairs = [[query, doc.page_content] for doc in initial_docs]
+
+    # 3. Predecir puntuaciones de relevancia precisa (High Precision)
+    rerank_scores = reranker.predict(pairs)
+
+    # 4. Emparejar documentos con sus nuevos puntajes y ordenar de mayor a menor
+    docs_with_rerank_scores = list(zip(initial_docs, rerank_scores))
+    docs_with_rerank_scores.sort(key=lambda x: x[1], reverse=True)
+
+    # 5. Devolver únicamente los top k mejores
+    return docs_with_rerank_scores[:k]
 
 
 def build_context(retrieved_documents):
@@ -107,7 +137,8 @@ def generate_answer(query, context):
 
 
 def rag_query(query, k=5):
-    docs_with_scores = retrieve_documents(query, k=k)
+    # Recuperación con FAISS + Re-ranking de 3*k candidatos
+    docs_with_scores = retrieve_documents(query, k=k, fetch_k=k*3)
     retrieved_documents = [doc for doc, _ in docs_with_scores]
     context = build_context(retrieved_documents)
     answer = generate_answer(query, context)
@@ -117,8 +148,8 @@ def rag_query(query, k=5):
             "titulo": doc.metadata.get("title", "N/A"),
             "categorias": doc.metadata.get("categories", "N/A"),
             "fragmento": doc.page_content[:300] + "...",
-            # Conversión correcta: distancia L2 de FAISS -> Similitud Coseno
-            "score": round(1 - (float(score) / 2), 4),
+            # El score del Cross-Encoder refleja la relevancia semántica real
+            "score": round(float(score), 4),
         }
         for doc, score in docs_with_scores
     ]
@@ -141,10 +172,11 @@ with st.sidebar:
         "Corpus: arXiv Paper Abstracts (Kaggle)\n\n"
         "Embeddings: BAAI/bge-small-en-v1.5\n\n"
         "Vector store: FAISS\n\n"
+        "Re-ranking: ms-marco-MiniLM-L-6 (Cross-Encoder)\n\n"
         "LLM: Gemini 2.5 Flash"
     )
 
-# Renderizar historial de la sesión
+# Renderizar historial de la sesión (blindado con .get() por seguridad)
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
@@ -152,7 +184,7 @@ for msg in st.session_state.messages:
             with st.expander("📄 Ver evidencias utilizadas"):
                 for i, ev in enumerate(msg["evidencias"]):
                     st.markdown(f"**[Doc {i+1}] {ev.get('titulo', 'N/A')}**")
-                    st.caption(f"Categorías: {ev.get('categorias', 'N/A')} | Similitud coseno: {ev.get('score', 'N/A')}")
+                    st.caption(f"Categorías: {ev.get('categorias', 'N/A')} | Score de relevancia: {ev.get('score', 'N/A')}")
                     st.write(ev.get("fragmento", ""))
                     st.markdown("---")
 
@@ -165,13 +197,13 @@ if query := st.chat_input("Escribe tu consulta sobre artículos científicos..."
         st.markdown(query)
 
     with st.chat_message("assistant"):
-        with st.spinner("Buscando documentos relevantes y generando respuesta..."):
+        with st.spinner("Buscando, re-ordenando documentos relevantes y generando respuesta..."):
             resultado = rag_query(query, k=k)
         st.markdown(resultado["respuesta"])
         with st.expander("📄 Ver evidencias utilizadas"):
             for i, ev in enumerate(resultado["evidencias"]):
                 st.markdown(f"**[Doc {i+1}] {ev.get('titulo', 'N/A')}**")
-                st.caption(f"Categorías: {ev.get('categorias', 'N/A')} | Similitud coseno: {ev.get('score', 'N/A')}")
+                st.caption(f"Categorías: {ev.get('categorias', 'N/A')} | Score de relevancia: {ev.get('score', 'N/A')}")
                 st.write(ev.get("fragmento", ""))
                 st.markdown("---")
 
