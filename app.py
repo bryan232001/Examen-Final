@@ -112,13 +112,14 @@ def rag_query(query, k=5):
     context = build_context(retrieved_documents)
     answer = generate_answer(query, context)
     evidencias = [
-        {
-            "titulo": doc.metadata.get("title", "N/A"),
-            "categorias": doc.metadata.get("categories", "N/A"),
-            "fragmento": doc.page_content[:300] + "...",
-            "score": round(float(score), 4),
-        }
-        for doc, score in docs_with_scores
+    {
+        "titulo": doc.metadata.get("title", "N/A"),
+        "categorias": doc.metadata.get("categories", "N/A"),
+        "fragmento": doc.page_content[:300] + "...",
+        "score": round(1 - (float(score) ** 2) / 2, 4),  # convertimos distancia L2 a similitud coseno
+    }
+    for doc, score in docs_with_scores
+]
     ]
     return {"query": query, "respuesta": answer, "evidencias": evidencias}
 
