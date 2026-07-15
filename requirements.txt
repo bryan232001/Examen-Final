@@ -1,6 +1,7 @@
 streamlit
 sentence-transformers
 langchain-community
+langchain-core
 faiss-cpu
 google-genai
 huggingface_hub
