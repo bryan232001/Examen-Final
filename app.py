@@ -103,4 +103,80 @@ def generate_answer(query, context):
             "system_instruction": "Eres un asistente de investigación riguroso y honesto.",
         },
     )
-    return
+    return response.text
+
+
+def rag_query(query, k=5):
+    docs_with_scores = retrieve_documents(query, k=k)
+    retrieved_documents = [doc for doc, _ in docs_with_scores]
+    context = build_context(retrieved_documents)
+    answer = generate_answer(query, context)
+    evidencias = [
+        {
+            "titulo": doc.metadata.get("title", "N/A"),
+            "categorias": doc.metadata.get("categories", "N/A"),
+            "fragmento": doc.page_content[:300] + "...",
+            "score": round(float(score), 4),
+        }
+        for doc, score in docs_with_scores
+    ]
+    return {"query": query, "respuesta": answer, "evidencias": evidencias}
+
+
+# --------------------------------------------------------------
+# Estado del chat (solo historial visual, sin memoria conversacional real)
+# --------------------------------------------------------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Slider para top-k en la barra lateral
+with st.sidebar:
+    st.header("⚙️ Configuración")
+    k = st.slider("Número de documentos a recuperar (k)", 1, 10, 5)
+    st.markdown("---")
+    st.markdown(
+        "**Sobre este sistema:**\n\n"
+        "Corpus: arXiv Paper Abstracts (Kaggle)\n\n"
+        "Embeddings: BAAI/bge-small-en-v1.5\n\n"
+        "Vector store: FAISS\n\n"
+        "LLM: Gemini 2.5 Flash"
+    )
+
+# Renderizar historial
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if msg["role"] == "assistant" and "evidencias" in msg:
+            with st.expander("📄 Ver evidencias utilizadas"):
+                for i, ev in enumerate(msg["evidencias"]):
+                    st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
+                    st.caption(f"Categorías: {ev['categorias']} | Similitud: {ev['score']}")
+                    st.write(ev["fragmento"])
+                    st.markdown("---")
+
+# --------------------------------------------------------------
+# Input de chat
+# --------------------------------------------------------------
+if query := st.chat_input("Escribe tu consulta sobre artículos científicos..."):
+    st.session_state.messages.append({"role": "user", "content": query})
+    with st.chat_message("user"):
+        st.markdown(query)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Buscando documentos relevantes y generando respuesta..."):
+            resultado = rag_query(query, k=k)
+        st.markdown(resultado["respuesta"])
+        with st.expander("📄 Ver evidencias utilizadas"):
+            for i, ev in enumerate(resultado["evidencias"]):
+                st.markdown(f"**[Doc {i+1}] {ev['titulo']}**")
+                st.caption(f"Categorías: {ev['categorias']} | Similitud: {ev['score']}")
+                st.write(ev["fragmento"])
+                st.markdown("---")
+
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": resultado["respuesta"],
+            "evidencias": resultado["evidencias"],
+        }
+    )
