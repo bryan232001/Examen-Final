@@ -70,7 +70,7 @@ def load_vector_store():
         allow_dangerous_deserialization=True,
     )
     return vector_store
-
+vector_store = load_vector_store() 
 
 # --------------------------------------------------------------
 # Funciones del pipeline RAG (idénticas a las del notebook)
